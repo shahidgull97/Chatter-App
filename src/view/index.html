@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChatterUp</title>
+    <link rel="stylesheet" href="/src/view/styles.css" />
+  </head>
+  <body>
+    <div class="form-container">
+      <form id="login-form" action="">
+        <input
+          type="text"
+          id="username"
+          placeholder="Enter your name"
+          required
+        />
+        <input
+          type="text"
+          id="roomnumber"
+          placeholder="Enter your room"
+          required
+        />
+        <input
+          type="text"
+          id="profilepic"
+          placeholder="Enter profile pic address"
+        />
+        <button type="submit">Submit</button>
+      </form>
+    </div>
+
+    <div class="chat-container">
+      <div class="chat-main">
+        <div class="chat-header">
+          <span class="status-dot"></span>
+          <span id="welcome-msg"></span>
+          <span id="typing-indicator"></span>
+        </div>
+        <div class="chat-messages">
+          <div class="message message-bot">
+            <!-- <div class="message-info"></div> -->
+          </div>
+        </div>
+        <div class="chat-input">
+          <div class="input-container">
+            <input
+              type="text"
+              class="message-input"
+              placeholder="Enter your message..."
+            />
+            <button class="send-button">Send</button>
+          </div>
+        </div>
+      </div>
+      <div class="users-panel">
+        <div class="panel-header"></div>
+        <div class="connected-users">
+          <!-- Add online users here -->
+        </div>
+      </div>
+    </div>
+
+    <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io.connect("http://localhost:3000");
+
+      const chatapp = document.getElementsByClassName("chat-container")[0];
+      chatapp.style.display = "none";
+
+      const formContainer =
+        document.getElementsByClassName("form-container")[0];
+
+      // Get username and room number
+      const userName = document.getElementById("username");
+      const roomNumber = document.getElementById("roomnumber");
+      const profilepic = document.getElementById("profilepic");
+
+      //   GEt welcome message element
+      const welcom = document.getElementById("welcome-msg");
+
+      let user = "";
+      let room = "";
+      let profile = "";
+
+      // This is the login part
+      document.getElementById("login-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        chatapp.style.display = "";
+        formContainer.style.display = "none";
+        user = userName.value;
+        room = roomNumber.value;
+        profile = profilepic.value;
+
+        socket.emit("login", { user, room });
+      });
+
+      //   Get online users
+      const connectedUsers =
+        document.getElementsByClassName("connected-users")[0];
+      socket.on("welcomeMessage", (data) => {
+        welcom.innerText = data.text;
+      });
+
+      const panelHeader = document.getElementsByClassName("panel-header")[0];
+      // Displaying the online users
+      socket.on("onlineUsers", (data) => {
+        panelHeader.innerText = "Connected Devices: " + data.length;
+
+        connectedUsers.innerHTML = "";
+        data.forEach((value) => {
+          const onlineUser = document.createElement("div");
+          onlineUser.className = "user-item";
+          const dotSpan = document.createElement("span");
+          dotSpan.className = "status-dot";
+          const userSpan = document.createElement("p");
+          userSpan.innerText = value;
+
+          onlineUser.appendChild(dotSpan);
+          onlineUser.appendChild(userSpan);
+          connectedUsers.appendChild(onlineUser);
+        });
+      });
+
+      //   Get user message input
+      const userInput = document.getElementsByClassName("message-input")[0];
+      document
+        .getElementsByClassName("send-button")[0]
+        .addEventListener("click", () => {
+          const userInputValue = userInput.value;
+          socket.emit("usermessage", { user, room, userInputValue, profile });
+          userInput.value = "";
+        });
+
+      // Display message and notification sound
+      const notificationSound = new Audio(
+        "../../public/media/reverby-notification-sound-246407.mp3"
+      );
+      const messageContainer = document.getElementsByClassName("message")[0];
+      socket.on("displaymessage", (msgData) => {
+        notificationSound.play().catch((error) => {
+          console.error("Error playing notification sound:", error);
+        });
+        msgData.forEach((data) => {
+          const userDetails = document.createElement("div");
+          userDetails.className = "message-info";
+          const date = new Date(data.createdAt);
+          const profileImg = document.createElement("img");
+          profileImg.className = "avatar";
+          profileImg.src = data.profilepic;
+
+          const msgtime = document.createElement("span");
+          msgtime.className = "message-time";
+          msgtime.innerText = date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          const sender = document.createElement("span");
+          sender.className = "message-sender";
+          sender.innerText = data.username;
+
+          const messageData = document.createElement("p");
+          messageData.className = "message-content";
+          messageData.innerText = data.message;
+
+          userDetails.appendChild(sender);
+          userDetails.appendChild(msgtime);
+          userDetails.appendChild(messageData);
+          messageContainer.appendChild(profileImg);
+          messageContainer.appendChild(userDetails);
+        });
+      });
+
+      //  Event listner for typing indicator
+      const typingIndicator = document.getElementById("typing-indicator");
+      userInput.addEventListener("input", () => {
+        socket.emit("typing", { username: user });
+      });
+      // Displaying Typing indicator
+      socket.on("displayTyping", (data) => {
+        typingIndicator.textContent = `${data.username} is typing...`;
+        typingIndicator.style.visibility = "visible";
+      });
+      // stopping typing indicator
+      userInput.addEventListener("blur", () => {
+        typingIndicator.style.visibility = "hidden";
+        socket.emit("stoptyping");
+      });
+
+      socket.on("hideTyping", () => {
+        typingIndicator.style.visibility = "hidden";
+      });
+    </script>
+  </body>
+</html>
